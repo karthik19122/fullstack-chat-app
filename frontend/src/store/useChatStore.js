@@ -13,56 +13,123 @@ export const useChatStore = create((set, get) => ({
   getUsers: async () => {
     set({ isUsersLoading: true });
     try {
-      const res = await axiosInstance.get("/messages/users");
-      set({ users: res.data });
+      const { data } = await axiosInstance.get("/messages/users");
+      set({ users: data });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error?.response?.data?.message || "Failed to fetch users");
     } finally {
       set({ isUsersLoading: false });
     }
   },
 
   getMessages: async (userId) => {
+    const { messages } = get();
+    if (messages.some(msg => msg.senderId === userId)) return;
+
     set({ isMessagesLoading: true });
     try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      const { data } = await axiosInstance.get(`/messages/${userId}`);
+      set({ messages: data });
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error?.response?.data?.message || "Failed to fetch messages");
     } finally {
       set({ isMessagesLoading: false });
     }
   },
-  sendMessage: async (messageData) => {
+
+  sendMessage: async (messageData, scheduledTime = null) => {
     const { selectedUser, messages } = get();
+    if (!selectedUser) {
+      toast.error("No user selected");
+      return;
+    }
+
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      set({ messages: [...messages, res.data] });
+      const { data } = await axiosInstance.post(
+        `/messages/send/${selectedUser._id}`,
+        { ...messageData, scheduledAt: scheduledTime }
+      );
+      set({ messages: [...messages, data] });
+      toast.success(scheduledTime ? "Message scheduled!" : "Message sent!");
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error?.response?.data?.message || "Failed to send message");
+    }
+  },
+
+  // New method for editing messages
+  editMessage: async (messageId, newText) => {
+    const { selectedUser, messages } = get();
+    if (!selectedUser) {
+      toast.error("No user selected");
+      return;
+    }
+
+    try {
+      const { data } = await axiosInstance.put(
+        `/messages/edit/${messageId}`,
+        { newText }
+      );
+      // Update message in the state after successful editing
+      set({
+        messages: messages.map((msg) =>
+          msg._id === messageId ? { ...msg, text: newText } : msg
+        ),
+      });
+      toast.success("Message edited!");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to edit message");
+    }
+  },
+
+  // New method for deleting messages
+  deleteMessage: async (messageId) => {
+    const { selectedUser, messages } = get();
+    if (!selectedUser) {
+      toast.error("No user selected");
+      return;
+    }
+
+    try {
+      await axiosInstance.delete(`/messages/delete/${messageId}`);
+      set({
+        messages: messages.filter((msg) => msg._id !== messageId),
+      });
+      toast.success("Message deleted!");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to delete message");
     }
   },
 
   subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
-
+    const { selectedUser, messages } = get();
     const socket = useAuthStore.getState().socket;
 
-    socket.on("newMessage", (newMessage) => {
-      const isMessageSentFromSelectedUser = newMessage.senderId === selectedUser._id;
-      if (!isMessageSentFromSelectedUser) return;
+    if (!selectedUser || !socket) {
+      toast.error("Socket or selected user not available");
+      return;
+    }
 
-      set({
-        messages: [...get().messages, newMessage],
-      });
+    socket.off("newMessage");
+
+    socket.on("newMessage", (newMessage) => {
+      if (newMessage.senderId !== selectedUser._id || messages.some(msg => msg._id === newMessage._id)) return;
+      set({ messages: [...get().messages, newMessage] });
     });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    socket.off("newMessage");
+    if (socket) {
+      socket.off("newMessage");
+    }
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  setSelectedUser: (user) => {
+    set({ selectedUser: user });
+    get().getMessages(user._id);
+  },
+
+  resetStore: () => {
+    set({ selectedUser: null, messages: [] });
+  },
 }));

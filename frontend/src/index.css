@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+.EmojiPickerReact {
+    width: 100% !important;
+  }
+  

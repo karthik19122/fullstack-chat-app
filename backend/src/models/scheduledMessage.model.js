@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const messageSchema = new mongoose.Schema(
+const scheduledMessageSchema = new mongoose.Schema(
   {
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -14,16 +14,15 @@ const messageSchema = new mongoose.Schema(
     },
     text: {
       type: String,
-      default: "",
     },
     image: {
       type: String,
     },
-    scheduledAt: {
+    scheduledTime: {
       type: Date,
-      default: null,
+      required: true,
     },
-    delivered: {
+    isSent: {
       type: Boolean,
       default: false,
     },
@@ -31,7 +30,12 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Add a method to mark the message as sent
+scheduledMessageSchema.methods.markAsSent = async function () {
+  this.isSent = true;
+  await this.save();
+};
 
-const Message = mongoose.model("Message", messageSchema);
+const ScheduledMessage = mongoose.model("ScheduledMessage", scheduledMessageSchema);
 
-export default Message;
+export default ScheduledMessage;
